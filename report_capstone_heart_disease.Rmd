@@ -1,5 +1,5 @@
 ---
-title: "Capstone Heart Disease"
+title: "Capstone Project: Predicting Heart Disease"
 author: "Heloise Auger"
 date: "10 avril 2019"
 output: pdf_document
