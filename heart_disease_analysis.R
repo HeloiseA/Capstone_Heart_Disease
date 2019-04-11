@@ -42,32 +42,21 @@ data_columns <- c("age", "sex", "chestPain", "BPrest", "chol", "fastBloodSugar",
 data_full <- read.table("processed.cleveland.data", sep=",", col.names = data_columns)
 
 # Eliminate rows with missing values, indicated by "?" in this dataset
-data <- data_full %>% filter_all(all_vars(.!="?"))
+disease_data <- data_full %>% filter_all(all_vars(.!="?"))
 
 # Create a new column "diseaseBin" with values of 0 and 1 indicating Heart Disease. The existing column
 # "disease" contains numeric values of 0-4, where 0 means no heart disease and 4, severe heart disease.
 # In this project, the aim is to predict instances of disease regardless of severity. Thus, values 1-4
 # are converted to 1 in "disease_bin". Remove old disease column.
-data <- data %>% mutate("diseaseBin" = ifelse(disease==0, 0, 1))
-data$disease <- NULL
+disease_data <- disease_data %>% mutate("diseaseBin" = ifelse(disease==0, 0, 1))
+disease_data$disease <- NULL
 
 # Convert categorical variables from numeric to factor.
 cols <- c("sex", "chestPain", "fastBloodSugar", "ECGrest", "exerciseAngina", "STslope", "defect","diseaseBin")
-data[cols] <- lapply(data[cols], factor)
+disease_data[cols] <- lapply(disease_data[cols], factor)
 # The nFluoVessels was loaded as factors due to the presence of "?" values initially.
 # We convert it back to numeric.
-data$nFluoVessels <- as.numeric(data$nFluoVessels)
-
-
-#############################################################
-# Create Training and Testing Sets
-#############################################################
-
-# The testing set will be 20% of the orignal dataset.
-set.seed(1)
-index <- createDataPartition(y = data$diseaseBin, times = 1, p = 0.1, list = FALSE)
-trainingSet <- data[-index,]
-testingSet <- data[index,]
+disease_data$nFluoVessels <- as.numeric(disease_data$nFluoVessels)
 
 
 #############################################################
@@ -76,26 +65,101 @@ testingSet <- data[index,]
 
 library(ggplot2)
 
+# Vizualize the density distributions for Heart Disease conditions in function of
+# the available continuous parameters
 
+HeartDisease <- disease_data$diseaseBin
 
+density_plot <- function(column, param_name){
+  ggplot(disease_data, aes(x=column, fill=HeartDisease, color=HeartDisease)) +
+    geom_density(alpha=0.2) +
+    theme(legend.position="bottom") +
+    scale_x_continuous(name=param_name) +
+    scale_fill_discrete(name='Heart Disease',labels=c("No", "Yes")) +
+    scale_color_discrete(name='Heart Disease',labels=c("No", "Yes"))
+}
 
+plotAge <- density_plot(disease_data$age, "Age")
+plotAge
 
+plotBPrest <- density_plot(disease_data$BPrest, "Blood Pressure at Rest (mmHg)")
+plotBPrest
 
+plotchol <- density_plot(disease_data$chol, "Cholesterol (mg/dl)")
+plotchol
 
+plotmaxHR <- density_plot(disease_data$maxHR, "Maximum Heart Rate during Exercise (BPM)")
+plotmaxHR
 
+plotSTpeak <- density_plot(disease_data$SToldPeak, "ECG Wave-ST Depression Induced by Exercise Relative to Rest")
+plotSTpeak
 
+plotFluo <- density_plot(disease_data$nFluoVessels, "Number of Major Vessels Colored by Fluoroscopy")
+plotFluo
 
+# Visualize the categorical parameters with histograms
 
-dim(data)
-head(data)
+format_barplot <- function(gc, columngroup, param_name, labelling){
+  ggplot(gc, aes(x=columngroup, y=n, fill=diseaseBin))+ 
+    geom_bar( stat="identity") +
+    scale_x_discrete(name=param_name, labels=labelling) +
+    scale_fill_discrete(name='Heart Disease', labels=c("No", "Yes")) +
+    scale_color_discrete(name='Heart Disease', labels=c("No", "Yes")) +
+    theme(legend.position="bottom")
+}
 
+groupby_sex <- disease_data %>% group_by(diseaseBin) %>% count(sex) %>% as.data.frame()
+plotSex <- format_barplot(groupby_sex, groupby_sex$sex, "Sex", c("Female", "Male"))
+plotSex
 
+groupby_cp <- disease_data %>% group_by(diseaseBin) %>% count(chestPain) %>% as.data.frame()
+plotCP <- format_barplot(groupby_cp, groupby_cp$chestPain, "Chest Pain Type",
+                         c("Typical Angina", "Atypical Angina", "Non-Anginal Pain", "Asymptomatic")) 
+plotCP
 
+groupby_fbs <- disease_data %>% group_by(diseaseBin) %>% count(fastBloodSugar) %>% as.data.frame()
+plotFBS <- format_barplot(groupby_fbs, groupby_fbs$fastBloodSugar, "Fasting Blood Sugar",
+                          c("< 120 mg/dl", ">= 120 mg/dl"))
+plotFBS
+  
+groupby_ECGrest <- disease_data %>% group_by(diseaseBin) %>% count(ECGrest) %>% as.data.frame()
+plotECGrest <- format_barplot(groupby_ECGrest, groupby_ECGrest$ECGrest, "ECG at Rest Status",
+                          c("Normal", "ST-T wave abnormality", "left ventricular hypertrophy"))
+plotECGrest
 
+groupby_exAng <- disease_data %>% group_by(diseaseBin) %>% count(exerciseAngina) %>% as.data.frame()
+plotexAng <- format_barplot(groupby_exAng, groupby_exAng$exerciseAngina, "Exercise-Induced Angina",
+                            c("No Angina", "Angina"))
+plotexAng
 
+groupby_STslope <- disease_data %>% group_by(diseaseBin) %>% count(STslope) %>% as.data.frame()
+plotSTslope <- format_barplot(groupby_STslope, groupby_STslope$STslope, "Slope of Peak Exercise ECG ST Segment",
+                              c("Upsloping", "Flat", "Downsloping"))
+plotSTslope
 
+groupby_defect <- disease_data %>% group_by(diseaseBin) %>% count(defect) %>% as.data.frame()
+plotdefect <- format_barplot(groupby_defect, groupby_defect$defect, "Thalium Stress Test Result",
+                              c("Normal", "Fixed Defect", "Reversable Defect"))
+plotdefect
 
+# todo Here eliminate useless columns from disease_data
 
+#############################################################
+# Create Training and Testing Sets
+#############################################################
+
+dim(disease_data)
+head(disease_data)
+
+# todo review method to make multiple training and testing sets...
+
+# The testing set will be 20% of the orignal dataset.
+set.seed(1)
+index <- createDataPartition(y = disease_data$diseaseBin, times = 1, p = 0.1, list = FALSE)
+trainingSet <- data[-index,]
+testingSet <- data[index,]
+
+group_count$n
 
 
 
