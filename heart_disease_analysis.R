@@ -68,6 +68,9 @@ library(ggplot2)
 # Vizualize the density distributions for Heart Disease conditions in function of
 # the available continuous parameters
 
+dim(disease_data)
+head(disease_data)
+
 HeartDisease <- disease_data$diseaseBin
 
 density_plot <- function(column, param_name){
@@ -142,25 +145,90 @@ plotdefect <- format_barplot(groupby_defect, groupby_defect$defect, "Thalium Str
                               c("Normal", "Fixed Defect", "Reversable Defect"))
 plotdefect
 
-# todo Here eliminate useless columns from disease_data
+keep_columns <- c(2, 3, 8, 9, 11, 12, 13, 14)
+disease_clean <- disease_data[, keep_columns]
 
 #############################################################
 # Create Training and Testing Sets
 #############################################################
 
-dim(disease_data)
-head(disease_data)
-
-# todo review method to make multiple training and testing sets...
-
 # The testing set will be 20% of the orignal dataset.
 set.seed(1)
-index <- createDataPartition(y = disease_data$diseaseBin, times = 1, p = 0.1, list = FALSE)
-trainingSet <- data[-index,]
-testingSet <- data[index,]
+index <- createDataPartition(y = disease_clean$diseaseBin, times = 1, p = 0.2, list = FALSE)
+trainingSet <- disease_clean[-index,]
+testingSet <- disease_clean[index,]
 
-group_count$n
+#############################################################
+# Create a first model with K-Nearest Neighbors
+#############################################################
 
+# We train a k-nearest neighbor algorithm with a tunegrid parameter to optimize for k
+train_knn <- train(diseaseBin ~ ., method = "knn",
+                   data = trainingSet,
+                   tuneGrid = data.frame(k = seq(2, 100, 2)))
+ggplot(train_knn, highlight = TRUE)
+optim_k <- train_knn$bestTune[1, 1]
 
+knn_fit <- knn3(diseaseBin ~ ., data = trainingSet, k = optim_k)
+y_hat_knn <- predict(knn_fit, testingSet, type = "class")
+cm_knn <- confusionMatrix(data = y_hat_knn, reference = testingSet$diseaseBin, positive = "1")
 
+# Return optimized k value, Accuracy, Sensitivity and Specificity
+Accuracy_knn <- cm_knn$overall["Accuracy"]
+Sensitivity_knn <- cm_knn$byClass["Sensitivity"]
+Specificity_knn <- cm_knn$byClass["Specificity"]
+print("K-Nearest Neighbors Results")
+cat("Optimized k: ", optim_k)
+cat("Accuracy: ", Accuracy_knn)
+cat("Sensitivity: ", Sensitivity_knn)
+cat("Specificity: ", Specificity_knn)
+
+#############################################################
+# Create a second model with Adaptative Boosting
+#############################################################
+
+# Warning, this may take a few minutes to run
+train_ada <- train(diseaseBin ~ ., method = "adaboost", data = trainingSet)
+y_hat_ada <- predict(train_ada, testingSet)
+cm_ada <- confusionMatrix(data = y_hat_ada, reference = testingSet$diseaseBin, positive = "1")
+
+# Return Accuracy, Sensitivity and Specificity
+Accuracy_ada <- cm_ada$overall["Accuracy"]
+Sensitivity_ada <- cm_ada$byClass["Sensitivity"]
+Specificity_ada <- cm_ada$byClass["Specificity"]
+print("Adaptative Boosting Results")
+cat("Accuracy: ", Accuracy_ada)
+cat("Sensitivity: ", Sensitivity_ada)
+cat("Specificity: ", Specificity_ada)
+
+#############################################################
+# Create a third model with Naive Bayes
+#############################################################
+
+# Look at correlation between features to verify independance
+matrix_data <- matrix(as.numeric(unlist(disease_clean)),nrow=nrow(disease_clean))
+cor(matrix_data)
+
+# Train and predict using Naive Bayes
+train_nb <- train(diseaseBin ~ ., method = "nb", data = trainingSet)
+y_hat_nb <- predict(train_nb, testingSet)
+cm_nb <- confusionMatrix(data = y_hat_nb, reference = testingSet$diseaseBin, positive = "1")
+
+# Return Accuracy, Sensitivity and Specificity
+Accuracy_nb <- cm_nb$overall["Accuracy"]
+Sensitivity_nb <- cm_nb$byClass["Sensitivity"]
+Specificity_nb <- cm_nb$byClass["Specificity"]
+print("Naive Bayes Results")
+cat("Accuracy: ", Accuracy_nb)
+cat("Sensitivity: ", Sensitivity_nb)
+cat("Specificity: ", Specificity_nb)
+
+# Display final results
+results <- tribble(
+  ~Method, ~Accuracy, ~Sensitivity,  ~Specificity,
+  "K-nn", Accuracy_knn,  Sensitivity_knn, Specificity_knn,
+  "Adaboost", Accuracy_ada,  Sensitivity_ada, Specificity_ada,
+  "Naive Bayes", Accuracy_nb,  Sensitivity_nb, Specificity_nb
+)
+results
 
