@@ -4,7 +4,6 @@ if(!is.null(dev.list())) dev.off()
 cat("\014") 
 # Clean workspace
 rm(list=ls())
-
 #############################################################
 # HarvardX: PH125.9 - Data Science: Capstone
 #############################################################
@@ -33,6 +32,7 @@ library(caret)
 # 1. Go to: https://github.com/HeloiseA/Capstone_Heart_Disease.
 # 2. Click "Clone or Download" button, then select "Download ZIP".
 # 3. Unzip the downloaded folder and copy the file "processed.cleveland.data" to your current working directory.
+# Finally: Comment the download.file lines and launch the code again
 download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data",
               "processed.cleveland.data")
 
@@ -54,10 +54,10 @@ disease_data$disease <- NULL
 # Convert categorical variables from numeric to factor.
 cols <- c("sex", "chestPain", "fastBloodSugar", "ECGrest", "exerciseAngina", "STslope", "defect","diseaseBin")
 disease_data[cols] <- lapply(disease_data[cols], factor)
+
 # The nFluoVessels was loaded as factors due to the presence of "?" values initially.
 # We convert it back to numeric.
 disease_data$nFluoVessels <- as.numeric(disease_data$nFluoVessels)
-
 
 #############################################################
 # Data Exploration and Selection of Meaningful Parameters
@@ -65,14 +65,15 @@ disease_data$nFluoVessels <- as.numeric(disease_data$nFluoVessels)
 
 library(ggplot2)
 
-# Vizualize the density distributions for Heart Disease conditions in function of
-# the available continuous parameters
-
+# Explore dimensions
 dim(disease_data)
 head(disease_data)
 
+# Vizualize the density distributions for Heart Disease conditions in function of
+# the available continuous features
 HeartDisease <- disease_data$diseaseBin
 
+# Create a function for the density plots
 density_plot <- function(column, param_name){
   ggplot(disease_data, aes(x=column, fill=HeartDisease, color=HeartDisease)) +
     geom_density(alpha=0.2) +
@@ -82,6 +83,7 @@ density_plot <- function(column, param_name){
     scale_color_discrete(name='Heart Disease',labels=c("No", "Yes"))
 }
 
+# Plot for all continuous features
 plotAge <- density_plot(disease_data$age, "Age")
 plotAge
 
@@ -100,8 +102,8 @@ plotSTpeak
 plotFluo <- density_plot(disease_data$nFluoVessels, "Number of Major Vessels Colored by Fluoroscopy")
 plotFluo
 
-# Visualize the categorical parameters with histograms
-
+# Visualize the categorical parameters with stacked barplots
+# Create a function for the barplots
 format_barplot <- function(gc, columngroup, param_name, labelling){
   ggplot(gc, aes(x=columngroup, y=n, fill=diseaseBin))+ 
     geom_bar( stat="identity") +
@@ -111,6 +113,7 @@ format_barplot <- function(gc, columngroup, param_name, labelling){
     theme(legend.position="bottom")
 }
 
+# Plot for all categorical features
 groupby_sex <- disease_data %>% group_by(diseaseBin) %>% count(sex) %>% as.data.frame()
 plotSex <- format_barplot(groupby_sex, groupby_sex$sex, "Sex", c("Female", "Male"))
 plotSex
@@ -145,8 +148,10 @@ plotdefect <- format_barplot(groupby_defect, groupby_defect$defect, "Thalium Str
                               c("Normal", "Fixed Defect", "Reversable Defect"))
 plotdefect
 
+# Based on observation, keep only features that vary based on disease status
 keep_columns <- c(2, 3, 8, 9, 11, 12, 13, 14)
 disease_clean <- disease_data[, keep_columns]
+head(disease_clean)
 
 #############################################################
 # Create Training and Testing Sets
@@ -163,12 +168,17 @@ testingSet <- disease_clean[index,]
 #############################################################
 
 # We train a k-nearest neighbor algorithm with a tunegrid parameter to optimize for k
+set.seed(1989)
 train_knn <- train(diseaseBin ~ ., method = "knn",
                    data = trainingSet,
-                   tuneGrid = data.frame(k = seq(2, 100, 2)))
-ggplot(train_knn, highlight = TRUE)
+                   tuneGrid = data.frame(k = seq(2, 30, 2)))
+
+# Visualize and save the optimal value for k
+k_plot <- ggplot(train_knn, highlight = TRUE)
+kplot
 optim_k <- train_knn$bestTune[1, 1]
 
+# Train and predict using k-nn with optimized k value
 knn_fit <- knn3(diseaseBin ~ ., data = trainingSet, k = optim_k)
 y_hat_knn <- predict(knn_fit, testingSet, type = "class")
 cm_knn <- confusionMatrix(data = y_hat_knn, reference = testingSet$diseaseBin, positive = "1")
@@ -187,6 +197,7 @@ cat("Specificity: ", Specificity_knn)
 # Create a second model with Adaptative Boosting
 #############################################################
 
+# Train and predict outcomes with the adaboost algorithm
 # Warning, this may take a few minutes to run
 train_ada <- train(diseaseBin ~ ., method = "adaboost", data = trainingSet)
 y_hat_ada <- predict(train_ada, testingSet)
@@ -207,7 +218,8 @@ cat("Specificity: ", Specificity_ada)
 
 # Look at correlation between features to verify independance
 matrix_data <- matrix(as.numeric(unlist(disease_clean)),nrow=nrow(disease_clean))
-cor(matrix_data)
+correlations <- cor(matrix_data)
+correlations
 
 # Train and predict using Naive Bayes
 train_nb <- train(diseaseBin ~ ., method = "nb", data = trainingSet)
@@ -223,12 +235,40 @@ cat("Accuracy: ", Accuracy_nb)
 cat("Sensitivity: ", Sensitivity_nb)
 cat("Specificity: ", Specificity_nb)
 
+########################################################################
+# Use Weighted Subspace Random Forest (WSRF) and k-fold Cross-Validation
+########################################################################
+
+# Define train control for k-fold (10-fold here) cross validation
+set.seed(1001)
+train_control <- trainControl(method="cv", number=10)
+
+# Train and predict using WSRF
+set.seed(1002)
+train_wsrf <- train(diseaseBin ~ ., data = trainingSet, 
+                 method = "wsrf", 
+                 trControl = train_control)
+y_hat_wsrf <- predict(train_wsrf, testingSet)
+cm_wsrf <- confusionMatrix(data = y_hat_wsrf, reference = testingSet$diseaseBin, positive = "1")
+
+# Return Accuracy, Sensitivity and Specificity
+Accuracy_wsrf <- cm_wsrf$overall["Accuracy"]
+Sensitivity_wsrf <- cm_wsrf$byClass["Sensitivity"]
+Specificity_wsrf <- cm_wsrf$byClass["Specificity"]
+print("K-Fold Cross-Validation and WSRF Results")
+cat("Accuracy: ", Accuracy_wsrf)
+cat("Sensitivity: ", Sensitivity_wsrf)
+cat("Specificity: ", Specificity_wsrf)
+
+#############################################################
 # Display final results
+#############################################################
+
 results <- tribble(
   ~Method, ~Accuracy, ~Sensitivity,  ~Specificity,
   "K-nn", Accuracy_knn,  Sensitivity_knn, Specificity_knn,
   "Adaboost", Accuracy_ada,  Sensitivity_ada, Specificity_ada,
-  "Naive Bayes", Accuracy_nb,  Sensitivity_nb, Specificity_nb
+  "Naive Bayes", Accuracy_nb,  Sensitivity_nb, Specificity_nb,
+  "WSRF + K-fold c.v.", Accuracy_wsrf,  Sensitivity_wsrf, Specificity_wsrf
 )
 results
-
