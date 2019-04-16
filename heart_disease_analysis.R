@@ -51,7 +51,7 @@ disease_data[cols] <- lapply(disease_data[cols], factor)
 
 # The nFluoVessels was loaded as factors due to the presence of "?" values initially.
 # We convert it back to numeric.
-disease_data$nFluoVessels <- as.numeric(disease_data$nFluoVessels)
+disease_data$nFluoVessels <- as.numeric(disease_data$nFluoVessels) - 2
 
 #############################################################
 # Data Exploration and Selection of Meaningful Parameters
@@ -169,7 +169,7 @@ train_knn <- train(diseaseBin ~ ., method = "knn",
 
 # Visualize and save the optimal value for k
 k_plot <- ggplot(train_knn, highlight = TRUE)
-kplot
+k_plot
 optim_k <- train_knn$bestTune[1, 1]
 
 # Train and predict using k-nn with optimized k value
@@ -188,7 +188,7 @@ cat("Sensitivity: ", Sensitivity_knn)
 cat("Specificity: ", Specificity_knn)
 
 #############################################################
-# Create a second model with Adaptative Boosting
+# Create a second model with Adaptive Boosting
 #############################################################
 
 # Train and predict outcomes with the adaboost algorithm
@@ -201,7 +201,7 @@ cm_ada <- confusionMatrix(data = y_hat_ada, reference = testingSet$diseaseBin, p
 Accuracy_ada <- cm_ada$overall["Accuracy"]
 Sensitivity_ada <- cm_ada$byClass["Sensitivity"]
 Specificity_ada <- cm_ada$byClass["Specificity"]
-print("Adaptative Boosting Results")
+print("Adaptive Boosting Results")
 cat("Accuracy: ", Accuracy_ada)
 cat("Sensitivity: ", Sensitivity_ada)
 cat("Specificity: ", Specificity_ada)
